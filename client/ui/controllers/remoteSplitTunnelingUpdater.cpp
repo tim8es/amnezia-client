@@ -135,8 +135,7 @@ QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
             (current.value(it.key()) == previous.value(it.key()) || previous.value(it.key()).isEmpty());
         const bool newEntry = !previous.contains(it.key()) && !current.contains(it.key());
         if (untouched || newEntry) {
-            const QStringList ips = it.value().isEmpty() && untouched &&
-                                    previous.value(it.key()).isEmpty()
+            const QStringList ips = it.value().isEmpty() && untouched
                 ? current.value(it.key()) : it.value();
             result.insert(it.key(), ips);
             if (managed) managed->insert(it.key(), it.value());
