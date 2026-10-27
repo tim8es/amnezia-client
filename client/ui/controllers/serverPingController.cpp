@@ -93,9 +93,22 @@ int ServerPingController::parseRttMs(const QByteArray &output)
 
 void ServerPingController::setResult(const QString &id, const QString &value)
 {
+    if (m_results.value(id) == value)
+        return;
     m_results.insert(id, value);
-    ++m_revision;
-    emit resultsChanged();
+    scheduleResultsChanged();
+}
+
+void ServerPingController::scheduleResultsChanged()
+{
+    if (m_resultsNotifyPending)
+        return;
+    m_resultsNotifyPending = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_resultsNotifyPending = false;
+        ++m_revision;
+        emit resultsChanged();
+    });
 }
 
 void ServerPingController::enqueue(const QString &id, const QString &host)
@@ -135,28 +148,22 @@ void ServerPingController::pingServer(const QString &serverId)
 
 
 QString ServerPingController::countryTarget(const QString &code, const QString &currentCode,
-                                            const QString &currentHost, const QString &publishedHost)
+                                            const QString &currentHost)
 {
-    // shortcut: without a read-only catalog endpoint, probe only the currently selected country.
-    return code == currentCode && !currentHost.isEmpty() ? currentHost : publishedHost;
+    // The subscription country catalog does not expose known endpoint addresses.
+    return !code.isEmpty() && code == currentCode ? currentHost : QString();
 }
 
 QString ServerPingController::hostForCountry(const QString &serverId, const QString &countryCode) const
 {
-    if (m_countries->serverId() != serverId)
+    if (m_countries->serverId() != serverId ||
+        countryCode != m_countries->getCurrentCountryCode())
         return {};
-    QString currentHost;
+
     for (int row = 0; row < m_servers->rowCount(); ++row) {
-        const auto index = m_servers->index(row);
-        if (m_servers->data(index, ServersModel::ServerIdRole).toString() == serverId) {
-            currentHost = m_servers->data(index, ServersModel::HostNameRole).toString();
-            break;
-        }
-    }
-    for (const auto &country : m_countries->countries()) {
-        if (country.countryCode == countryCode)
-            return countryTarget(countryCode, m_countries->getCurrentCountryCode(),
-                                 currentHost, country.hostName);
+        const QModelIndex index = m_servers->index(row);
+        if (m_servers->data(index, ServersModel::ServerIdRole).toString() == serverId)
+            return m_servers->data(index, ServersModel::HostNameRole).toString();
     }
     return {};
 }
@@ -189,13 +196,15 @@ void ServerPingController::pingCountries(const QString &serverId)
     if (m_countries->serverId() != serverId)
         return;
     cancel();
+    const QString currentCode = m_countries->getCurrentCountryCode();
+    const QString currentHost = hostForCountry(serverId, currentCode);
     for (const auto &country : m_countries->countries()) {
         const QString id = serverId + QStringLiteral("/") + country.countryCode;
-        const QString host = hostForCountry(serverId, country.countryCode);
-        if (!host.isEmpty())
-            enqueue(id, host);
-        else
+        const QString target = countryTarget(country.countryCode, currentCode, currentHost);
+        if (target.isEmpty())
             setResult(id, tr("Address unavailable"));
+        else
+            enqueue(id, target);
     }
     startQueued();
     emit busyChanged();
@@ -278,8 +287,7 @@ void ServerPingController::cancel()
     }
     m_running.clear();
     m_results.clear();
-    ++m_revision;
-    emit resultsChanged();
+    scheduleResultsChanged();
     if (wasBusy)
         emit busyChanged();
 }

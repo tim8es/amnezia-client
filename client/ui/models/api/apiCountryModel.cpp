@@ -96,7 +96,6 @@ void ApiCountryModel::updateModel(const QJsonArray &countries, const QString &cu
         countryInfo.countryName = countryObject.value(apiDefs::key::serverCountryName).toString();
         countryInfo.countryCode = countryObject.value(apiDefs::key::serverCountryCode).toString();
         countryInfo.countryCodeL10n = countryObject.value(apiDefs::key::serverCountryCodeL10n).toString();
-        countryInfo.hostName = countryObject.value(QStringLiteral("hostName")).toString();
 
         if (countryInfo.countryCode == currentCountryCode) {
             m_currentIndex = i;

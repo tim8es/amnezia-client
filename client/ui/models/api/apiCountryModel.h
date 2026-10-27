@@ -23,7 +23,6 @@ public:
         QString countryName;
         QString countryCode;
         QString countryCodeL10n;
-        QString hostName;
     };
 
     explicit ApiCountryModel(QObject *parent = nullptr);

@@ -30,8 +30,7 @@ public:
 
     static bool isValidTarget(const QString &host);
     static int parseRttMs(const QByteArray &output);
-    static QString countryTarget(const QString &code, const QString &currentCode,
-                                 const QString &currentHost, const QString &publishedHost);
+    static QString countryTarget(const QString &code, const QString &currentCode, const QString &currentHost);
 
 signals:
     void busyChanged();
@@ -48,6 +47,7 @@ private:
     void finish(QProcess *process, bool replied);
     void cancel();
     void setResult(const QString &id, const QString &text);
+    void scheduleResultsChanged();
 
     ServersModel *m_servers;
     ApiCountryModel *m_countries;
@@ -56,6 +56,7 @@ private:
     QHash<QProcess *, QString> m_running;
     QHash<QString, QString> m_results;
     int m_revision = 0;
+    bool m_resultsNotifyPending = false;
 };
 
 #endif // SERVERPINGCONTROLLER_H
