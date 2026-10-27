@@ -211,8 +211,9 @@ void RemoteSplitTunnelingUpdater::checkNow()
             }
             oldUrl = state.object().value(QStringLiteral("source")).toString();
             oldHash = state.object().value(QStringLiteral("hash")).toString().toLatin1();
-            oldBytes = QJsonDocument(state.object().value(QStringLiteral("list")).toArray())
-                           .toJson(QJsonDocument::Compact);
+            const QJsonArray managedList = state.object().value(QStringLiteral("list")).toArray();
+            if (!managedList.isEmpty())
+                oldBytes = QJsonDocument(managedList).toJson(QJsonDocument::Compact);
         } else {
             // Migration for builds that stored complete lists in QSettings.
             oldBytes = m_settings.value(key + QStringLiteral("managedJson")).toByteArray();
