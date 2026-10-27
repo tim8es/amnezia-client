@@ -73,11 +73,11 @@ bool isValidHost(const QString &host)
         && domain.match(host).hasMatch();
 }
 
-QByteArray backupJson(const QVariantMap &sites, int mode)
+QByteArray backupJson(const QMap<QString, QStringList> &sites, int mode)
 {
     QJsonObject map;
     for (auto it = sites.cbegin(); it != sites.cend(); ++it)
-        map.insert(it.key(), QJsonArray::fromStringList(it.value().toStringList()));
+        map.insert(it.key(), QJsonArray::fromStringList(it.value()));
     return QJsonDocument(QJsonObject{
         {QStringLiteral("routeMode"), mode},
         {QStringLiteral("createdUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
@@ -431,10 +431,7 @@ void RemoteSplitTunnelingUpdater::applyPending()
     m_settings.remove(prefix + QStringLiteral("/skippedUrl"));
     m_settings.sync();
     if (m_settings.status() != QSettings::NoError) {
-        QMap<QString, QStringList> previous;
-        for (auto it = current.cbegin(); it != current.cend(); ++it)
-            previous.insert(it.key(), it.value().toStringList());
-        m_sites->addSites(previous, true);
+        m_sites->addSites(current, true);
         m_model->updateModel(m_sites->getCurrentSites());
         setStatus(tr("Saving subscription state failed; previous rules restored."));
         return;
