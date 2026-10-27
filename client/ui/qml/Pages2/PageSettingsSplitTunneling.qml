@@ -166,6 +166,70 @@ PageType {
                 text: root.routeModes[modeSelector.currentIndex].name
                 color: AmneziaStyle.color.textSecondary
             }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                Layout.bottomMargin: 20
+                spacing: 8
+
+                BodyTextType {
+                    Layout.fillWidth: true
+                    text: qsTr("Remote list subscription")
+                }
+                ComboBox {
+                    id: subscriptionSource
+                    Layout.fillWidth: true
+                    enabled: !RemoteSplitTunnelingUpdater.busy
+                    model: [qsTr("Domains"), qsTr("IP (lite)"),
+                            qsTr("IP (full)"), qsTr("Custom HTTPS URL")]
+                    currentIndex: RemoteSplitTunnelingUpdater.sourceIndex
+                    onActivated: function(index) {
+                        RemoteSplitTunnelingUpdater.sourceIndex = index
+                    }
+                }
+                TextFieldType {
+                    id: remoteListUrl
+                    Layout.fillWidth: true
+                    visible: subscriptionSource.currentIndex === 3
+                    enabled: !RemoteSplitTunnelingUpdater.busy
+                    placeholderText: qsTr("https://example.com/amnezia.json")
+                    textField.text: RemoteSplitTunnelingUpdater.customUrl
+                    Connections {
+                        target: remoteListUrl.textField
+                        function onEditingFinished() {
+                            RemoteSplitTunnelingUpdater.customUrl = remoteListUrl.textField.text
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    ButtonType {
+                        text: RemoteSplitTunnelingUpdater.pending ? qsTr("Apply pending update") : qsTr("Update now")
+                        enabled: !RemoteSplitTunnelingUpdater.busy
+                        onClicked: RemoteSplitTunnelingUpdater.checkNow()
+                    }
+                    ButtonType {
+                        variant: ButtonType.Secondary
+                        text: qsTr("Skip")
+                        visible: RemoteSplitTunnelingUpdater.pending
+                        enabled: !RemoteSplitTunnelingUpdater.busy
+                        onClicked: RemoteSplitTunnelingUpdater.skipPending()
+                    }
+                    CheckBoxType {
+                        text: qsTr("Auto-update (6h)")
+                        checked: RemoteSplitTunnelingUpdater.autoUpdate
+                        onToggled: RemoteSplitTunnelingUpdater.autoUpdate = checked
+                    }
+                }
+                BodyTextType {
+                    Layout.fillWidth: true
+                    text: RemoteSplitTunnelingUpdater.status
+                    color: AmneziaStyle.color.textSecondary
+                    wrapMode: Text.WordWrap
+                }
+            }
         }
 
         delegate: Item {

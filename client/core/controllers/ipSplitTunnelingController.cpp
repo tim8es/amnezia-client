@@ -47,6 +47,12 @@ void IpSplitTunnelingController::addSites(const QMap<QString, QStringList> &site
 {
     if (replaceExisting) {
         m_sites.clear();
+        m_sites.reserve(sites.size());
+        for (auto it = sites.constBegin(); it != sites.constEnd(); ++it)
+            m_sites.append(qMakePair(it.key(), it.value()));
+        m_appSettingsRepository->removeAllVpnSites(m_currentRouteMode);
+        m_appSettingsRepository->addVpnSites(m_currentRouteMode, sites);
+        return;
     }
     for (auto it = sites.constBegin(); it != sites.constEnd(); ++it) {
         const QString &hostname = it.key();
@@ -66,9 +72,6 @@ void IpSplitTunnelingController::addSites(const QMap<QString, QStringList> &site
         if (!found) {
             m_sites.append(qMakePair(hostname, ips));
         }
-    }
-    if (replaceExisting) {
-        m_appSettingsRepository->removeAllVpnSites(m_currentRouteMode);
     }
     m_appSettingsRepository->addVpnSites(m_currentRouteMode, sites);
 }

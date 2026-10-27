@@ -1,4 +1,5 @@
 #include "coreController.h"
+#include "ui/controllers/remoteSplitTunnelingUpdater.h"
 
 #include <QCoreApplication>
 #include <QDirIterator>
@@ -227,6 +228,10 @@ void CoreController::initControllers()
 
     m_ipSplitTunnelingUiController = new IpSplitTunnelingUiController(m_ipSplitTunnelingController, m_ipSplitTunnelingModel, this);
     setQmlContextProperty("IpSplitTunnelingController", m_ipSplitTunnelingUiController);
+
+    auto *remoteSplitUpdater = new RemoteSplitTunnelingUpdater(m_ipSplitTunnelingController,
+        m_ipSplitTunnelingModel, m_connectionUiController, this);
+    setQmlContextProperty("RemoteSplitTunnelingUpdater", remoteSplitUpdater);
 
     m_allowedDnsUiController = new AllowedDnsUiController(m_allowedDnsController, m_allowedDnsModel, this);
     setQmlContextProperty("AllowedDnsController", m_allowedDnsUiController);
