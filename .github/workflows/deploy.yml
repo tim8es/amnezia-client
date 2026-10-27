@@ -1055,6 +1055,7 @@ jobs:
           - XrayCoreAcceptsTest
           - UiLanguageModelAndControllerTest
           - UiIpModelAndControllerTest
+          - RemoteSplitTunnelingListsTest
           - UiAppSTModelAndControllerTest
           - UiAllowedDnsModelAndControllerTest
           - BackupExportImportTest
@@ -1272,6 +1273,7 @@ jobs:
           - XrayCoreAcceptsTest
           - UiLanguageModelAndControllerTest
           - UiIpModelAndControllerTest
+          - RemoteSplitTunnelingListsTest
           - UiAppSTModelAndControllerTest
           - UiAllowedDnsModelAndControllerTest
           - BackupExportImportTest
@@ -1391,6 +1393,7 @@ jobs:
           - XraySerializationTest
           - UiLanguageModelAndControllerTest
           - UiIpModelAndControllerTest
+          - RemoteSplitTunnelingListsTest
           - UiAppSTModelAndControllerTest
           - UiAllowedDnsModelAndControllerTest
           - BackupExportImportTest

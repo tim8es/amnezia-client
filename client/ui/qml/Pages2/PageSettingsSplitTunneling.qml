@@ -228,6 +228,14 @@ PageType {
         id: moreActionsMenu
 
         PopupMenuItemType {
+            text: qsTr("Remote list updates")
+            onClicked: {
+                moreActionsMenu.close()
+                remoteListsSheet.open()
+            }
+        }
+
+        PopupMenuItemType {
             id: addImportedSitesButton
 
             text: qsTr("Add imported sites to existing ones")
@@ -298,6 +306,82 @@ PageType {
                 }
 
                 Dialogs.askQuestion(headerText, descriptionText, yesButtonText, noButtonText, yesButtonFunction, noButtonFunction)
+            }
+        }
+    }
+
+    SheetType {
+        id: remoteListsSheet
+        expandedHeight: remoteListsContent.implicitHeight + 24 + PageController.safeAreaBottomMargin
+
+        ColumnLayout {
+            id: remoteListsContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 16
+            spacing: 12
+
+            BodyTextType {
+                text: qsTr("Remote list updates")
+            }
+            ListItemType {
+                id: sourceSelector
+                Layout.fillWidth: true
+                text: qsTr("List source")
+                subtitle: [qsTr("Domains"), qsTr("IP (lite)"),
+                           qsTr("IP (full)"), qsTr("Custom HTTPS URL")]
+                          [RemoteSplitTunnelingUpdater.sourceIndex]
+                trailingIconSource: "qrc:/images/controls/chevron-right.svg"
+                onClicked: remoteSourceMenu.openAbove(sourceSelector)
+            }
+            TextFieldType {
+                id: remoteListUrl
+                Layout.fillWidth: true
+                visible: RemoteSplitTunnelingUpdater.sourceIndex === 3
+                placeholderText: qsTr("https://example.com/amnezia.json")
+                textField.text: RemoteSplitTunnelingUpdater.customUrl
+                Connections {
+                    target: remoteListUrl.textField
+                    function onEditingFinished() {
+                        RemoteSplitTunnelingUpdater.customUrl = remoteListUrl.textField.text
+                    }
+                }
+            }
+            CheckBoxType {
+                text: qsTr("Auto-update (6h)")
+                checked: RemoteSplitTunnelingUpdater.autoUpdate
+                onToggled: RemoteSplitTunnelingUpdater.autoUpdate = checked
+            }
+            ButtonType {
+                text: RemoteSplitTunnelingUpdater.busy ? qsTr("Checking...") : qsTr("Update now")
+                enabled: root.pageEnabled && !RemoteSplitTunnelingUpdater.busy
+                onClicked: RemoteSplitTunnelingUpdater.checkNow()
+            }
+            BodyTextType {
+                Layout.fillWidth: true
+                text: RemoteSplitTunnelingUpdater.status
+                color: AmneziaStyle.color.textSecondary
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
+
+    PopupMenuType {
+        id: remoteSourceMenu
+
+        Repeater {
+            model: [qsTr("Domains"), qsTr("IP (lite)"),
+                    qsTr("IP (full)"), qsTr("Custom HTTPS URL")]
+
+            PopupMenuItemType {
+                required property int index
+                required property string modelData
+                text: modelData
+                onClicked: {
+                    RemoteSplitTunnelingUpdater.sourceIndex = index
+                    remoteSourceMenu.close()
+                }
             }
         }
     }
