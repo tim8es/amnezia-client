@@ -2,7 +2,6 @@
 
 #include "core/controllers/ipSplitTunnelingController.h"
 #include "ui/controllers/connectionUiController.h"
-#include "ui/models/ipSplitTunnelingModel.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -33,9 +32,9 @@ QString managedFilePath(int mode)
 }
 
 RemoteSplitTunnelingUpdater::RemoteSplitTunnelingUpdater(
-    IpSplitTunnelingController *sites, IpSplitTunnelingModel *model,
-    ConnectionUiController *connection, QObject *parent)
-    : QObject(parent), m_sites(sites), m_model(model), m_connection(connection),
+    IpSplitTunnelingController *sites, ConnectionUiController *connection,
+    QObject *parent)
+    : QObject(parent), m_sites(sites), m_connection(connection),
       m_settings(QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
                      .filePath(QStringLiteral("remote-split-tunneling.ini")), QSettings::IniFormat)
 {
@@ -252,7 +251,6 @@ void RemoteSplitTunnelingUpdater::checkNow()
         }
 
         m_sites->addSites(merged, true);
-        m_model->updateModel(m_sites->getCurrentSites());
 
         // One atomic file owns the source and its last managed entries.
         QSaveFile state(path);
@@ -272,7 +270,6 @@ void RemoteSplitTunnelingUpdater::checkNow()
         if (!state.open(QIODevice::WriteOnly) ||
             state.write(data) != data.size() || !state.commit()) {
             m_sites->addSites(current, true);
-            m_model->updateModel(m_sites->getCurrentSites());
             setStatus(tr("Cannot save update state; previous rules restored."));
             return;
         }
