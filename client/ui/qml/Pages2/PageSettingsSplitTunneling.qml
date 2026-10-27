@@ -328,12 +328,15 @@ PageType {
             BodyTextType {
                 text: qsTr("Remote list updates")
             }
-            ComboBox {
+            ListItemType {
+                id: sourceSelector
                 Layout.fillWidth: true
-                model: [qsTr("Domains"), qsTr("IP (lite)"),
-                        qsTr("IP (full)"), qsTr("Custom HTTPS URL")]
-                currentIndex: RemoteSplitTunnelingUpdater.sourceIndex
-                onActivated: function(index) { RemoteSplitTunnelingUpdater.sourceIndex = index }
+                text: qsTr("List source")
+                subtitle: [qsTr("Domains"), qsTr("IP (lite)"),
+                           qsTr("IP (full)"), qsTr("Custom HTTPS URL")]
+                          [RemoteSplitTunnelingUpdater.sourceIndex]
+                trailingIconSource: "qrc:/images/controls/chevron-right.svg"
+                onClicked: remoteSourceMenu.openAbove(sourceSelector)
             }
             TextFieldType {
                 id: remoteListUrl
@@ -363,6 +366,25 @@ PageType {
                 text: RemoteSplitTunnelingUpdater.status
                 color: AmneziaStyle.color.textSecondary
                 wrapMode: Text.WordWrap
+            }
+        }
+    }
+
+    PopupMenuType {
+        id: remoteSourceMenu
+
+        Repeater {
+            model: [qsTr("Domains"), qsTr("IP (lite)"),
+                    qsTr("IP (full)"), qsTr("Custom HTTPS URL")]
+
+            PopupMenuItemType {
+                required property int index
+                required property string modelData
+                text: modelData
+                onClicked: {
+                    RemoteSplitTunnelingUpdater.sourceIndex = index
+                    remoteSourceMenu.close()
+                }
             }
         }
     }

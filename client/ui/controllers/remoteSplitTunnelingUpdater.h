@@ -1,4 +1,5 @@
-#pragma once
+#ifndef REMOTESPLITTUNNELINGUPDATER_H
+#define REMOTESPLITTUNNELINGUPDATER_H
 
 #include <QMap>
 #include <QNetworkAccessManager>
@@ -34,7 +35,8 @@ public:
     static QMap<QString, QStringList> mergeSites(
         const QMap<QString, QStringList> &current,
         const QMap<QString, QStringList> &previous,
-        const QMap<QString, QStringList> &incoming);
+        const QMap<QString, QStringList> &incoming,
+        QMap<QString, QStringList> *managed = nullptr);
 
     Q_INVOKABLE void setSourceIndex(int);
     Q_INVOKABLE void setCustomUrl(const QString &);
@@ -59,3 +61,5 @@ private:
     bool m_busy = false;
     QString m_status;
 };
+
+#endif // REMOTESPLITTUNNELINGUPDATER_H

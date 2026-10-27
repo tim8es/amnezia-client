@@ -5,6 +5,8 @@
 #include <QVector>
 #include <QMap>
 #include <QPair>
+#include <QQueue>
+#include <QTimer>
 #include <QStringList>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -35,23 +37,30 @@ public:
     bool isSplitTunnelingEnabled() const;
     QVector<QPair<QString, QStringList>> getCurrentSites() const;
 
+    static bool parseSitesFromJson(const QByteArray &jsonData,
+                                   QMap<QString, QStringList> &sites,
+                                   QString &errorMessage, bool strict = false);
     bool importSitesFromJson(const QByteArray& jsonData, bool replaceExisting, QString &errorMessage);
     QByteArray exportSitesToJson() const;
-
-private slots:
-    void onHostResolved(const QHostInfo &hostInfo);
 
 private:
     void fillSites();
     bool addSiteInternal(const QString &hostname, const QStringList &ips);
-    QString normalizeHostname(const QString &hostname) const;
-    bool validateHostname(const QString &hostname) const;
-    void processSiteAfterResolve(const QString &hostname, const QStringList &ips);
+    static QString normalizeHostname(const QString &hostname);
+    static bool validateHostname(const QString &hostname);
+    void queueUnresolvedSites();
+    void startDnsLookups();
+    void flushResolvedSites();
     void processSite(const QString &hostname, const QStringList &ips);
 
     SecureAppSettingsRepository* m_appSettingsRepository;
     RouteMode m_currentRouteMode;
     QVector<QPair<QString, QStringList>> m_sites;
+    QQueue<QString> m_dnsPending;
+    QMap<QString, QStringList> m_dnsReady;
+    QTimer m_dnsFlushTimer;
+    quint64 m_dnsRevision = 0;
+    int m_dnsActive = 0;
 };
 
 #endif // IPSPLITTUNNELINGCONTROLLER_H
