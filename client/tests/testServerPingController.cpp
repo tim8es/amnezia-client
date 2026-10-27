@@ -2,6 +2,10 @@
 
 #include "ui/controllers/serverPingController.h"
 
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#endif
+
 class TestServerPingController : public QObject
 {
     Q_OBJECT
@@ -49,6 +53,8 @@ private slots:
 #if defined(Q_OS_WIN)
     void parsesWindowsOemRussianOutput()
     {
+        if (GetOEMCP() != 866)
+            QSKIP("CP866 fixture is applicable only with Russian OEM encoding");
         // Actual CP866 encoded ping.exe output from a Russian Windows locale.
         const QByteArray data = QByteArray::fromHex(
             "8ee2a2a5e220aee220312e312e312e313a20e7a8e1abae20a1a0a9e23d"
