@@ -1,6 +1,7 @@
 #include "serverPingController.h"
 
 #include "ui/models/serversModel.h"
+#include "ui/models/api/apiCountryModel.h"
 
 #include <QHostAddress>
 #include <QRegularExpression>
@@ -30,10 +31,11 @@ QStringList pingArguments(const QString &host)
 }
 } // namespace
 
-ServerPingController::ServerPingController(ServersModel *servers, QObject *parent)
-    : QObject(parent), m_servers(servers)
+ServerPingController::ServerPingController(ServersModel *servers, ApiCountryModel *countries, QObject *parent)
+    : QObject(parent), m_servers(servers), m_countries(countries)
 {
     connect(servers, &QAbstractItemModel::modelReset, this, &ServerPingController::cancel);
+    connect(countries, &QAbstractItemModel::modelReset, this, &ServerPingController::cancel);
 }
 
 bool ServerPingController::busy() const
@@ -129,6 +131,75 @@ void ServerPingController::pingServer(const QString &serverId)
             return;
         }
     }
+}
+
+
+QString ServerPingController::countryTarget(const QString &code, const QString &currentCode,
+                                            const QString &currentHost, const QString &publishedHost)
+{
+    // shortcut: without a read-only catalog endpoint, probe only the currently selected country.
+    return !publishedHost.isEmpty() ? publishedHost : code == currentCode ? currentHost : QString();
+}
+
+QString ServerPingController::hostForCountry(const QString &serverId, const QString &countryCode) const
+{
+    if (m_countries->serverId() != serverId)
+        return {};
+    QString currentHost;
+    for (int row = 0; row < m_servers->rowCount(); ++row) {
+        const auto index = m_servers->index(row);
+        if (m_servers->data(index, ServersModel::ServerIdRole).toString() == serverId) {
+            currentHost = m_servers->data(index, ServersModel::HostNameRole).toString();
+            break;
+        }
+    }
+    for (const auto &country : m_countries->countries()) {
+        if (country.countryCode == countryCode)
+            return countryTarget(countryCode, m_countries->getCurrentCountryCode(),
+                                 currentHost, country.hostName);
+    }
+    return {};
+}
+
+void ServerPingController::pingCountry(const QString &serverId, const QString &countryCode)
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    Q_UNUSED(serverId)
+    Q_UNUSED(countryCode)
+#else
+    if (m_countries->serverId() != serverId || countryCode.isEmpty())
+        return;
+    const QString id = serverId + QStringLiteral("/") + countryCode;
+    const QString host = hostForCountry(serverId, countryCode);
+    if (host.isEmpty()) {
+        setResult(id, tr("Address unavailable"));
+        return;
+    }
+    enqueue(id, host);
+    startQueued();
+    emit busyChanged();
+#endif
+}
+
+void ServerPingController::pingCountries(const QString &serverId)
+{
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
+    Q_UNUSED(serverId)
+#else
+    if (m_countries->serverId() != serverId)
+        return;
+    cancel();
+    for (const auto &country : m_countries->countries()) {
+        const QString id = serverId + QStringLiteral("/") + country.countryCode;
+        const QString host = hostForCountry(serverId, country.countryCode);
+        if (!host.isEmpty())
+            enqueue(id, host);
+        else
+            setResult(id, tr("Address unavailable"));
+    }
+    startQueued();
+    emit busyChanged();
+#endif
 }
 
 void ServerPingController::pingAll()
