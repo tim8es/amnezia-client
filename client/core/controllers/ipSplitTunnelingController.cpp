@@ -67,8 +67,22 @@ void IpSplitTunnelingController::addSites(const QMap<QString, QStringList> &site
         return;
     }
 
-    for (auto it = sites.cbegin(); it != sites.cend(); ++it)
-        addSiteInternal(it.key(), it.value());
+    for (auto it = sites.cbegin(); it != sites.cend(); ++it) {
+        bool found = false;
+        for (auto &site : m_sites) {
+            if (site.first != it.key())
+                continue;
+            for (const QString &ip : it.value()) {
+                if (!ip.isEmpty() && !site.second.contains(ip))
+                    site.second.append(ip);
+            }
+            found = true;
+            break;
+        }
+        if (!found)
+            m_sites.append(qMakePair(it.key(), it.value()));
+    }
+    m_appSettingsRepository->addVpnSites(m_currentRouteMode, sites);
 }
 
 bool IpSplitTunnelingController::addSite(const QString &hostname)
@@ -291,10 +305,13 @@ bool IpSplitTunnelingController::parseSitesFromJson(
         ips.removeDuplicates();
 
         if (strict && sites.contains(hostname)) {
-            ips.append(sites.value(hostname));
-            ips.removeDuplicates();
+            QStringList combined = sites.value(hostname);
+            combined.append(ips);
+            combined.removeDuplicates();
+            sites.insert(hostname, combined);
+        } else {
+            sites.insert(hostname, ips);
         }
-        sites.insert(hostname, ips);
     }
     if (strict && sites.isEmpty()) {
         errorMessage = tr("No valid entries found in the list.");
