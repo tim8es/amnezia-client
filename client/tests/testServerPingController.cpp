@@ -32,6 +32,15 @@ private slots:
         QCOMPARE(ServerPingController::isValidTarget(host), accepted);
     }
 
+    void selectsOnlyKnownSubscriptionEndpoints()
+    {
+        QCOMPARE(ServerPingController::countryTarget("DE", "DE", "192.0.2.1", ""),
+                 QString("192.0.2.1"));
+        QVERIFY(ServerPingController::countryTarget("FR", "DE", "192.0.2.1", "").isEmpty());
+        QCOMPARE(ServerPingController::countryTarget("FR", "DE", "192.0.2.1", "203.0.113.5"),
+                 QString("203.0.113.5"));
+    }
+
     void parsesRtt_data()
     {
         QTest::addColumn<QByteArray>("output");
