@@ -45,6 +45,17 @@ private slots:
         QFETCH(int, ms);
         QCOMPARE(ServerPingController::parseRttMs(output), ms);
     }
+
+#if defined(Q_OS_WIN)
+    void parsesWindowsOemRussianOutput()
+    {
+        // Actual CP866 encoded ping.exe output from a Russian Windows locale.
+        const QByteArray data = QByteArray::fromHex(
+            "8ee2a2a5e220aee220312e312e312e313a20e7a8e1abae20a1a0a9e23d"
+            "333220a2e0a5acef3d3231ace12054544c3d3534");
+        QCOMPARE(ServerPingController::parseRttMs(data), 21);
+    }
+#endif
 };
 
 QTEST_MAIN(TestServerPingController)
