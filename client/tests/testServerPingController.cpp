@@ -34,11 +34,10 @@ private slots:
 
     void selectsOnlyKnownSubscriptionEndpoints()
     {
-        QCOMPARE(ServerPingController::countryTarget("DE", "DE", "192.0.2.1", ""),
+        QCOMPARE(ServerPingController::countryTarget("DE", "DE", "192.0.2.1"),
                  QString("192.0.2.1"));
-        QVERIFY(ServerPingController::countryTarget("FR", "DE", "192.0.2.1", "").isEmpty());
-        QCOMPARE(ServerPingController::countryTarget("FR", "DE", "192.0.2.1", "203.0.113.5"),
-                 QString("203.0.113.5"));
+        QVERIFY(ServerPingController::countryTarget("FR", "DE", "192.0.2.1").isEmpty());
+        QVERIFY(ServerPingController::countryTarget("FR", "DE", "").isEmpty());
     }
 
     void parsesRtt_data()
