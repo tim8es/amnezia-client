@@ -275,7 +275,7 @@ bool IpSplitTunnelingController::parseSitesFromJson(
     }
 
     static const QRegularExpression domain(
-        QStringLiteral(R"(^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$)"));
+        QStringLiteral(R"(^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$)"));
     static const QRegularExpression numeric(QStringLiteral(R"(^[0-9.]+$)"));
 
     for (const QJsonValue &value : array) {
