@@ -1,16 +1,19 @@
 #include "remoteSplitTunnelingUpdater.h"
 
 #include "core/controllers/ipSplitTunnelingController.h"
+#include "core/utils/networkUtilities.h"
 #include "ui/controllers/connectionUiController.h"
 
-#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
+#include <QHostAddress>
+#include <QHostInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
@@ -107,11 +110,79 @@ void RemoteSplitTunnelingUpdater::setStatus(const QString &value)
     emit statusChanged();
 }
 
+
 bool RemoteSplitTunnelingUpdater::parseList(
     const QByteArray &bytes, QMap<QString, QStringList> &sites, QString &error)
 {
-    return IpSplitTunnelingController::parseSitesFromJson(bytes, sites, error, true);
+    sites.clear();
+    if (bytes.isEmpty() || bytes.size() > kMaxBytes) {
+        error = tr("The list is empty or exceeds the size limit.");
+        return false;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isArray()) {
+        error = tr("Invalid JSON list: %1").arg(parseError.errorString());
+        return false;
+    }
+    const QJsonArray items = document.array();
+    if (items.isEmpty() || items.size() > kMaxEntries) {
+        error = tr("The list is empty or unexpectedly large.");
+        return false;
+    }
+
+    static const QRegularExpression domain(
+        QStringLiteral(R"(^(?:[a-z0-9_-]+\.)+[a-z0-9_-]+$)"));
+    static const QRegularExpression numeric(QStringLiteral(R"(^[0-9.]+$)"));
+    for (const QJsonValue &value : items) {
+        if (!value.isObject())
+            continue;
+        const QJsonObject item = value.toObject();
+        QString host = item.value(QStringLiteral("hostname")).toString().trimmed().toLower();
+        for (const QString &prefix : {QStringLiteral("https://"), QStringLiteral("http://"),
+                                      QStringLiteral("ftp://")}) {
+            if (host.startsWith(prefix)) {
+                host.remove(0, prefix.size());
+                break;
+            }
+        }
+        if (!NetworkUtilities::checkIpSubnetFormat(host))
+            host = host.section('/', 0, 0);
+
+        if (!NetworkUtilities::checkIpSubnetFormat(host) &&
+            (host.size() > 253 || numeric.match(host).hasMatch() ||
+             !domain.match(host).hasMatch()))
+            continue;
+
+        QStringList ips;
+        if (item.value(QStringLiteral("ips")).isArray()) {
+            for (const QJsonValue &ip : item.value(QStringLiteral("ips")).toArray()) {
+                const QString address = ip.toString().trimmed();
+                if (NetworkUtilities::checkIpSubnetFormat(address))
+                    ips.append(address);
+            }
+        }
+        const QString oneIp = item.value(QStringLiteral("ip")).toString().trimmed();
+        if (NetworkUtilities::checkIpSubnetFormat(oneIp))
+            ips.append(oneIp);
+        ips.removeDuplicates();
+        if (sites.contains(host)) {
+            QStringList combined = sites.value(host);
+            combined.append(ips);
+            combined.removeDuplicates();
+            sites.insert(host, combined);
+        } else {
+            sites.insert(host, ips);
+        }
+    }
+    if (sites.isEmpty()) {
+        error = tr("No valid entries found in the list.");
+        return false;
+    }
+    return true;
 }
+
 
 QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
     const QMap<QString, QStringList> &current,
@@ -119,46 +190,60 @@ QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
     const QMap<QString, QStringList> &incoming,
     QMap<QString, QStringList> *managed)
 {
-    if (managed) managed->clear();
+    if (managed)
+        managed->clear();
+
     QMap<QString, QStringList> result = current;
     for (auto it = previous.cbegin(); it != previous.cend(); ++it) {
-        // A manually edited or deleted entry is no longer owned by the remote list.
-        // Domain-only subscriptions gain resolved addresses after import.
-        if (current.contains(it.key()) &&
-            (current.value(it.key()) == it.value() || it.value().isEmpty()))
+        // Only remove entries still identical to the last remote-owned value.
+        if (current.contains(it.key()) && current.value(it.key()) == it.value())
             result.remove(it.key());
     }
     for (auto it = incoming.cbegin(); it != incoming.cend(); ++it) {
         const bool untouched = previous.contains(it.key()) &&
-            current.contains(it.key()) &&
-            (current.value(it.key()) == previous.value(it.key()) || previous.value(it.key()).isEmpty());
+            current.contains(it.key()) && current.value(it.key()) == previous.value(it.key());
         const bool newEntry = !previous.contains(it.key()) && !current.contains(it.key());
         if (untouched || newEntry) {
+            // If DNS temporarily fails, keep the last known good address.
             const QStringList ips = it.value().isEmpty() && untouched
                 ? current.value(it.key()) : it.value();
             result.insert(it.key(), ips);
-            if (managed) managed->insert(it.key(), it.value());
+            if (managed)
+                managed->insert(it.key(), ips);
         }
     }
     return result;
 }
 
+
+void RemoteSplitTunnelingUpdater::complete(const QString &message)
+{
+    m_dnsPending.clear();
+    m_remoteSites.clear();
+    m_downloadBody.clear();
+    m_downloadUrl.clear();
+    m_busy = false;
+    emit busyChanged();
+    setStatus(message);
+}
+
 void RemoteSplitTunnelingUpdater::checkNow()
 {
-    if (m_busy) return;
+    if (m_busy)
+        return;
     if (m_connection->isConnected() || m_connection->isConnectionInProgress()) {
         setStatus(tr("Disconnect the VPN before updating the list."));
         return;
     }
+
     const QString url = sourceUrl();
     const QUrl parsed(url);
-    if (!parsed.isValid() || parsed.scheme() != QStringLiteral("https")
-        || parsed.host().isEmpty() || !parsed.userInfo().isEmpty()) {
+    if (!parsed.isValid() || parsed.scheme() != QStringLiteral("https") ||
+        parsed.host().isEmpty() || !parsed.userInfo().isEmpty()) {
         setStatus(tr("Provide a valid HTTPS source URL."));
         return;
     }
 
-    const int mode = static_cast<int>(m_sites->getRouteMode());
     m_busy = true;
     emit busyChanged();
     setStatus(tr("Checking list updates..."));
@@ -168,114 +253,163 @@ void RemoteSplitTunnelingUpdater::checkNow()
     request.setTransferTimeout(20000);
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::downloadProgress, this, [reply](qint64 bytes, qint64) {
-        if (bytes > kMaxBytes) reply->abort();
+        if (bytes > kMaxBytes)
+            reply->abort();
     });
+    const int mode = static_cast<int>(m_sites->getRouteMode());
     connect(reply, &QNetworkReply::finished, this, [this, reply, url, mode]() {
-        const int httpCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const bool networkOk = reply->error() == QNetworkReply::NoError;
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool ok = reply->error() == QNetworkReply::NoError;
         const QByteArray body = reply->readAll();
         reply->deleteLater();
-        m_busy = false;
-        emit busyChanged();
-
-        if (sourceUrl() != url || static_cast<int>(m_sites->getRouteMode()) != mode) {
-            setStatus(tr("Source or route mode changed. Check again."));
+        if (!ok || http != 200 || body.size() > kMaxBytes) {
+            complete(tr("Unable to download list (HTTP %1).").arg(http));
             return;
         }
-        if (!networkOk || httpCode != 200 || body.size() > kMaxBytes) {
-            setStatus(tr("Unable to download list (HTTP %1).").arg(httpCode));
-            return;
-        }
-
-        QMap<QString, QStringList> incoming;
+        QMap<QString, QStringList> sites;
         QString error;
-        if (!parseList(body, incoming, error)) { setStatus(error); return; }
-
-        // Keep large subscription snapshots out of the INI preferences.
-        const QString key = QStringLiteral("routeMode-%1/").arg(mode);
-        const QString path = managedFilePath(mode);
-        QByteArray oldBytes;
-        QString oldUrl;
-        QByteArray oldHash;
-        QFile stateFile(path);
-        if (stateFile.exists()) {
-            if (!stateFile.open(QIODevice::ReadOnly)) {
-                setStatus(tr("Cannot read previous list state; rules were not changed."));
-                return;
-            }
-            const QJsonDocument state = QJsonDocument::fromJson(stateFile.readAll());
-            if (!state.isObject() || !state.object().value(QStringLiteral("list")).isArray()) {
-                setStatus(tr("Previous list state is invalid; rules were not changed."));
-                return;
-            }
-            oldUrl = state.object().value(QStringLiteral("source")).toString();
-            oldHash = state.object().value(QStringLiteral("hash")).toString().toLatin1();
-            const QJsonArray managedList = state.object().value(QStringLiteral("list")).toArray();
-            if (!managedList.isEmpty())
-                oldBytes = QJsonDocument(managedList).toJson(QJsonDocument::Compact);
-        } else {
-            // Migration for builds that stored complete lists in QSettings.
-            oldBytes = m_settings.value(key + QStringLiteral("managedJson")).toByteArray();
-            oldUrl = m_settings.value(key + QStringLiteral("url")).toString();
-        }
-
-        QMap<QString, QStringList> previous;
-        if (!oldBytes.isEmpty() && !parseList(oldBytes, previous, error)) {
-            setStatus(tr("Previous list state is invalid; rules were not changed."));
+        if (!parseList(body, sites, error)) {
+            complete(error);
             return;
         }
-        const QByteArray hash = QCryptographicHash::hash(body, QCryptographicHash::Sha256).toHex();
-        if (oldUrl == url &&
-            ((!oldHash.isEmpty() && oldHash == hash) ||
-             (oldHash.isEmpty() && previous == incoming))) {
-            setStatus(tr("The list is already up to date."));
-            return;
-        }
-        if (m_connection->isConnected() || m_connection->isConnectionInProgress()) {
-            setStatus(tr("Disconnect the VPN before applying the list."));
+        if (url != sourceUrl() || mode != static_cast<int>(m_sites->getRouteMode())) {
+            complete(tr("Source or route mode changed. Check again."));
             return;
         }
 
-        QMap<QString, QStringList> current;
-        for (const auto &site : m_sites->getCurrentSites())
-            current.insert(site.first, site.second);
-        QMap<QString, QStringList> managed;
-        const auto merged = mergeSites(current, previous, incoming, &managed);
-        const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-        QSaveFile backup(QDir(directory).filePath(QStringLiteral("remote-split-backup-mode-%1.json").arg(mode)));
-        const QByteArray backupData = m_sites->exportSitesToJson();
-        if (!backup.open(QIODevice::WriteOnly) ||
-            backup.write(backupData) != backupData.size() || !backup.commit()) {
-            setStatus(tr("Cannot back up the current list; rules were not changed."));
+        m_downloadBody = body;
+        m_downloadUrl = url;
+        m_downloadMode = mode;
+        m_remoteSites = sites;
+        for (auto it = sites.cbegin(); it != sites.cend(); ++it) {
+            if (it.value().isEmpty() && !NetworkUtilities::checkIpSubnetFormat(it.key()))
+                m_dnsPending.enqueue(it.key());
+        }
+        if (m_dnsPending.size() > 5000) {
+            complete(tr("Too many hostnames to resolve."));
             return;
         }
-
-        m_sites->addSites(merged, true);
-
-        // One atomic file owns the source and its last managed entries.
-        QSaveFile state(path);
-        QJsonArray owned;
-        for (auto it = managed.cbegin(); it != managed.cend(); ++it) {
-            owned.append(QJsonObject{
-                {QStringLiteral("hostname"), it.key()},
-                {QStringLiteral("ips"), QJsonArray::fromStringList(it.value())}
-            });
+        if (m_dnsPending.isEmpty())
+            applyRemoteList();
+        else {
+            setStatus(tr("Resolving list domains..."));
+            resolveNext();
         }
-        const QJsonObject snapshot{
-            {QStringLiteral("source"), url},
-            {QStringLiteral("hash"), QString::fromLatin1(hash)},
-            {QStringLiteral("list"), owned}
-        };
-        const QByteArray data = QJsonDocument(snapshot).toJson(QJsonDocument::Compact);
-        if (!state.open(QIODevice::WriteOnly) ||
-            state.write(data) != data.size() || !state.commit()) {
-            m_sites->addSites(current, true);
-            setStatus(tr("Cannot save update state; previous rules restored."));
-            return;
-        }
-        m_settings.remove(key + QStringLiteral("managedJson"));
-        m_settings.remove(key + QStringLiteral("url"));
-        m_settings.sync();
-        setStatus(tr("Remote list updated (%1 entries).").arg(incoming.size()));
     });
 }
+
+void RemoteSplitTunnelingUpdater::resolveNext()
+{
+    constexpr int maxConcurrent = 8;
+    while (m_dnsActive < maxConcurrent && !m_dnsPending.isEmpty()) {
+        const QString hostname = m_dnsPending.dequeue();
+        ++m_dnsActive;
+        QHostInfo::lookupHost(hostname, this, [this, hostname](const QHostInfo &info) {
+            --m_dnsActive;
+            QStringList ips;
+            for (const QHostAddress &address : info.addresses()) {
+                if (address.protocol() == QAbstractSocket::IPv4Protocol)
+                    ips.append(address.toString());
+            }
+            ips.removeDuplicates();
+            if (!ips.isEmpty())
+                m_remoteSites[hostname] = ips;
+
+            if (m_dnsPending.isEmpty() && m_dnsActive == 0)
+                applyRemoteList();
+            else
+                resolveNext();
+        });
+    }
+}
+
+void RemoteSplitTunnelingUpdater::applyRemoteList()
+{
+    if (sourceUrl() != m_downloadUrl ||
+        static_cast<int>(m_sites->getRouteMode()) != m_downloadMode ||
+        m_connection->isConnected() || m_connection->isConnectionInProgress()) {
+        complete(tr("VPN state or source changed. Check again."));
+        return;
+    }
+
+    const QString key = QStringLiteral("routeMode-%1/").arg(m_downloadMode);
+    const QString path = managedFilePath(m_downloadMode);
+    QByteArray previousBytes;
+    QString previousUrl;
+    QFile old(path);
+    if (old.exists()) {
+        if (!old.open(QIODevice::ReadOnly)) {
+            complete(tr("Cannot read previous list state."));
+            return;
+        }
+        const QJsonDocument state = QJsonDocument::fromJson(old.readAll());
+        if (!state.isObject() || !state.object().value(QStringLiteral("list")).isArray()) {
+            complete(tr("Previous list state is invalid; rules were not changed."));
+            return;
+        }
+        previousUrl = state.object().value(QStringLiteral("source")).toString();
+        const QJsonArray list = state.object().value(QStringLiteral("list")).toArray();
+        if (!list.isEmpty())
+            previousBytes = QJsonDocument(list).toJson(QJsonDocument::Compact);
+    } else {
+        // Old builds kept the last imported list in preferences.
+        previousBytes = m_settings.value(key + QStringLiteral("managedJson")).toByteArray();
+        previousUrl = m_settings.value(key + QStringLiteral("url")).toString();
+    }
+
+    QMap<QString, QStringList> previous;
+    QString error;
+    if (!previousBytes.isEmpty() && !parseList(previousBytes, previous, error)) {
+        complete(tr("Previous list state is invalid; rules were not changed."));
+        return;
+    }
+
+    QMap<QString, QStringList> current;
+    for (const auto &site : m_sites->getCurrentSites())
+        current.insert(site.first, site.second);
+    QMap<QString, QStringList> managed;
+    const auto merged = mergeSites(current, previous, m_remoteSites, &managed);
+    if (merged == current && managed == previous && previousUrl == m_downloadUrl) {
+        complete(tr("The list is already up to date."));
+        return;
+    }
+
+    const bool changed = merged != current;
+    if (changed) {
+        QSaveFile backup(QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+                             .filePath(QStringLiteral("remote-split-backup-mode-%1.json").arg(m_downloadMode)));
+        const QByteArray original = m_sites->exportSitesToJson();
+        if (!backup.open(QIODevice::WriteOnly) ||
+            backup.write(original) != original.size() || !backup.commit()) {
+            complete(tr("Cannot back up the current list; rules were not changed."));
+            return;
+        }
+        m_sites->addSites(merged, true);
+    }
+
+    QJsonArray owned;
+    for (auto it = managed.cbegin(); it != managed.cend(); ++it) {
+        owned.append(QJsonObject{
+            {QStringLiteral("hostname"), it.key()},
+            {QStringLiteral("ips"), QJsonArray::fromStringList(it.value())}
+        });
+    }
+    const QJsonObject snapshot{
+        {QStringLiteral("source"), m_downloadUrl},
+        {QStringLiteral("list"), owned}
+    };
+    const QByteArray data = QJsonDocument(snapshot).toJson(QJsonDocument::Compact);
+    QSaveFile state(path);
+    if (!state.open(QIODevice::WriteOnly) ||
+        state.write(data) != data.size() || !state.commit()) {
+        if (changed)
+            m_sites->addSites(current, true);
+        complete(tr("Cannot save update state; previous rules restored."));
+        return;
+    }
+    m_settings.remove(key + QStringLiteral("managedJson"));
+    m_settings.remove(key + QStringLiteral("url"));
+    const int count = m_remoteSites.size();
+    complete(tr("Remote list updated (%1 entries).").arg(count));
+}
+
