@@ -74,6 +74,18 @@ private slots:
         QCOMPARE(result.value("still-managed.test"), (QStringList{"192.0.2.2"}));
     }
 
+    void doesNotClaimExistingLocalEntries()
+    {
+        const QMap<QString, QStringList> current{{"local.test", {"192.0.2.90"}}};
+        const QMap<QString, QStringList> incoming{{"local.test", {"203.0.113.5"}},
+                                                   {"remote.test", {}}};
+        QMap<QString, QStringList> managed;
+        const auto result = RemoteSplitTunnelingUpdater::mergeSites(current, {}, incoming, &managed);
+        QCOMPARE(result.value("local.test"), (QStringList{"192.0.2.90"}));
+        QVERIFY(!managed.contains("local.test"));
+        QVERIFY(managed.contains("remote.test"));
+    }
+
     void preservesManualEditsToManagedEntries()
     {
         const QMap<QString, QStringList> current{{"edited.test", {"192.0.2.90"}}};

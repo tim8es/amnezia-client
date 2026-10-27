@@ -4,6 +4,7 @@
 #include "ui/controllers/connectionUiController.h"
 #include "ui/models/ipSplitTunnelingModel.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -116,8 +117,10 @@ bool RemoteSplitTunnelingUpdater::parseList(
 QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
     const QMap<QString, QStringList> &current,
     const QMap<QString, QStringList> &previous,
-    const QMap<QString, QStringList> &incoming)
+    const QMap<QString, QStringList> &incoming,
+    QMap<QString, QStringList> *managed)
 {
+    if (managed) managed->clear();
     QMap<QString, QStringList> result = current;
     for (auto it = previous.cbegin(); it != previous.cend(); ++it) {
         // A manually edited or deleted entry is no longer owned by the remote list.
@@ -135,6 +138,7 @@ QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
             const QStringList ips = it.value().isEmpty() && untouched
                 ? previous.value(it.key()) : it.value();
             result.insert(it.key(), ips);
+            if (managed) managed->insert(it.key(), it.value());
         }
     }
     return result;
@@ -193,6 +197,7 @@ void RemoteSplitTunnelingUpdater::checkNow()
         const QString path = managedFilePath(mode);
         QByteArray oldBytes;
         QString oldUrl;
+        QByteArray oldHash;
         QFile stateFile(path);
         if (stateFile.exists()) {
             if (!stateFile.open(QIODevice::ReadOnly)) {
@@ -205,6 +210,7 @@ void RemoteSplitTunnelingUpdater::checkNow()
                 return;
             }
             oldUrl = state.object().value(QStringLiteral("source")).toString();
+            oldHash = state.object().value(QStringLiteral("hash")).toString().toLatin1();
             oldBytes = QJsonDocument(state.object().value(QStringLiteral("list")).toArray())
                            .toJson(QJsonDocument::Compact);
         } else {
@@ -218,7 +224,10 @@ void RemoteSplitTunnelingUpdater::checkNow()
             setStatus(tr("Previous list state is invalid; rules were not changed."));
             return;
         }
-        if (oldUrl == url && previous == incoming) {
+        const QByteArray hash = QCryptographicHash::hash(body, QCryptographicHash::Sha256).toHex();
+        if (oldUrl == url &&
+            ((!oldHash.isEmpty() && oldHash == hash) ||
+             (oldHash.isEmpty() && previous == incoming))) {
             setStatus(tr("The list is already up to date."));
             return;
         }
@@ -230,7 +239,8 @@ void RemoteSplitTunnelingUpdater::checkNow()
         QMap<QString, QStringList> current;
         for (const auto &site : m_sites->getCurrentSites())
             current.insert(site.first, site.second);
-        const auto merged = mergeSites(current, previous, incoming);
+        QMap<QString, QStringList> managed;
+        const auto merged = mergeSites(current, previous, incoming, &managed);
         const QString directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
         QSaveFile backup(QDir(directory).filePath(QStringLiteral("remote-split-backup-mode-%1.json").arg(mode)));
         const QByteArray backupData = m_sites->exportSitesToJson();
@@ -245,9 +255,17 @@ void RemoteSplitTunnelingUpdater::checkNow()
 
         // One atomic file owns the source and its last managed entries.
         QSaveFile state(path);
+        QJsonArray owned;
+        for (auto it = managed.cbegin(); it != managed.cend(); ++it) {
+            owned.append(QJsonObject{
+                {QStringLiteral("hostname"), it.key()},
+                {QStringLiteral("ips"), QJsonArray::fromStringList(it.value())}
+            });
+        }
         const QJsonObject snapshot{
             {QStringLiteral("source"), url},
-            {QStringLiteral("list"), QJsonDocument::fromJson(body).array()}
+            {QStringLiteral("hash"), QString::fromLatin1(hash)},
+            {QStringLiteral("list"), owned}
         };
         const QByteArray data = QJsonDocument(snapshot).toJson(QJsonDocument::Compact);
         if (!state.open(QIODevice::WriteOnly) ||
