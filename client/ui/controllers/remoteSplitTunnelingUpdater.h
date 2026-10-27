@@ -9,7 +9,6 @@
 #include <QTimer>
 
 class IpSplitTunnelingController;
-class IpSplitTunnelingModel;
 class ConnectionUiController;
 
 class RemoteSplitTunnelingUpdater final : public QObject
@@ -22,7 +21,7 @@ class RemoteSplitTunnelingUpdater final : public QObject
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
 
 public:
-    RemoteSplitTunnelingUpdater(IpSplitTunnelingController *, IpSplitTunnelingModel *,
+    RemoteSplitTunnelingUpdater(IpSplitTunnelingController *,
                                 ConnectionUiController *, QObject *parent = nullptr);
 
     int sourceIndex() const;
@@ -53,7 +52,6 @@ private:
     void setStatus(const QString &);
 
     IpSplitTunnelingController *m_sites;
-    IpSplitTunnelingModel *m_model;
     ConnectionUiController *m_connection;
     QSettings m_settings;
     QNetworkAccessManager m_network;
