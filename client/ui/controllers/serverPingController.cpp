@@ -138,7 +138,7 @@ QString ServerPingController::countryTarget(const QString &code, const QString &
                                             const QString &currentHost, const QString &publishedHost)
 {
     // shortcut: without a read-only catalog endpoint, probe only the currently selected country.
-    return !publishedHost.isEmpty() ? publishedHost : code == currentCode ? currentHost : QString();
+    return code == currentCode && !currentHost.isEmpty() ? currentHost : publishedHost;
 }
 
 QString ServerPingController::hostForCountry(const QString &serverId, const QString &countryCode) const
