@@ -26,6 +26,16 @@ PageType {
             width: servers.width
 
             title: qsTr("Servers")
+            description: qsTr("ICMP ping checks host reachability, not VPN availability.")
+
+            ButtonType {
+                text: ServerPingController.busy ? qsTr("Checking...") : qsTr("Ping all")
+                size: ButtonType.Small
+                variant: ButtonType.Secondary
+                enabled: !ServerPingController.busy
+                visible: !GC.isMobile()
+                onClicked: ServerPingController.pingAll()
+            }
         }
 
         model: ServersModel
@@ -54,13 +64,23 @@ PageType {
                         servicesNameString += servicesName[i] + " · "
                     }
 
-                    if (ServersUiController.isServerFromApi(serverId)) {
-                        return servicesNameString + serverDescription
-                    } else {
-                        return servicesNameString + hostName
-                    }
+                    // The revision property makes the status update reactive.
+                    ServerPingController.revision
+                    var result = ServerPingController.resultText(serverId)
+                    var base = ServersUiController.isServerFromApi(serverId)
+                               ? servicesNameString + serverDescription
+                               : servicesNameString + hostName
+                    return base + (result !== "" ? " · " + result : "")
                 }
-                trailingIconSource: "qrc:/images/controls/chevron-right.svg"
+                }
+                ButtonType {
+                    text: qsTr("Ping")
+                    size: ButtonType.Small
+                    variant: ButtonType.Secondary
+                    visible: !GC.isMobile()
+                    Accessible.name: qsTr("Ping %1").arg(name)
+                    onClicked: ServerPingController.pingServer(serverId)
+                }
 
                 onClicked: {
                     ServersUiController.setProcessedServerId(serverId)
