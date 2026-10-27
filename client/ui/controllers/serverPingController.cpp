@@ -151,7 +151,7 @@ QString ServerPingController::countryTarget(const QString &code, const QString &
                                             const QString &currentHost)
 {
     // The subscription country catalog does not expose known endpoint addresses.
-    return code == currentCode ? currentHost : QString();
+    return !code.isEmpty() && code == currentCode ? currentHost : QString();
 }
 
 QString ServerPingController::hostForCountry(const QString &serverId, const QString &countryCode) const
