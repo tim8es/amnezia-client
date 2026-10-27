@@ -439,7 +439,7 @@ void RemoteSplitTunnelingUpdater::applyPending()
         setStatus(tr("Saving subscription state failed; previous rules restored."));
         return;
     }
-    const int count = m_pendingSites.size();
+    const int count = newManaged.size();
     clearPending();
     setStatus(tr("Updated %1 subscription entries. User entries were preserved.").arg(count));
 }
