@@ -106,6 +106,7 @@ void ServerPingController::pingServer(const QString &serverId)
 #else
             enqueue(serverId, m_servers->data(index, ServersModel::HostNameRole).toString());
             startQueued();
+            emit busyChanged();
 #endif
             return;
         }
@@ -124,6 +125,7 @@ void ServerPingController::pingAll()
                 m_servers->data(index, ServersModel::HostNameRole).toString());
     }
     startQueued();
+    emit busyChanged();
 #endif
 }
 
@@ -141,8 +143,11 @@ void ServerPingController::startQueued()
                     finish(process, code == 0 && status == QProcess::NormalExit);
                 });
         connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
-            if (error == QProcess::FailedToStart)
+            if (error == QProcess::FailedToStart) {
+                const QString id = m_running.value(process);
                 finish(process, false);
+                setResult(id, tr("ICMP tool unavailable"));
+            }
         });
         QTimer::singleShot(kTimeoutMs, process, [process]() {
             if (process->state() != QProcess::NotRunning)
