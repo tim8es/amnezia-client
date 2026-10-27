@@ -111,6 +111,8 @@ bool IpSplitTunnelingController::removeSite(const QString &hostname)
 {
     for (int i = 0; i < m_sites.size(); i++) {
         if (m_sites[i].first == hostname) {
+            m_dnsPending.removeAll(hostname);
+            m_dnsReady.remove(hostname);
             m_sites.removeAt(i);
             m_appSettingsRepository->removeVpnSite(m_currentRouteMode, hostname);
             return true;
