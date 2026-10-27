@@ -75,7 +75,6 @@ PageType {
                                : servicesNameString + hostName
                     return base + (result !== "" ? " · " + result : "")
                 }
-                }
                 ButtonType {
                     text: qsTr("Ping")
                     size: ButtonType.Small
