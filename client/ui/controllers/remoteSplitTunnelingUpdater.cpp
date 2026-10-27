@@ -4,8 +4,6 @@
 #include "ui/controllers/connectionUiController.h"
 #include "ui/models/ipSplitTunnelingModel.h"
 
-#include <QCryptographicHash>
-#include <QDateTime>
 #include <QDir>
 #include <QHostAddress>
 #include <QJsonArray>
@@ -15,7 +13,6 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QSaveFile>
-#include <QSet>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -73,17 +70,6 @@ bool isValidHost(const QString &host)
         && domain.match(host).hasMatch();
 }
 
-QByteArray backupJson(const QMap<QString, QStringList> &sites, int mode)
-{
-    QJsonObject map;
-    for (auto it = sites.cbegin(); it != sites.cend(); ++it)
-        map.insert(it.key(), QJsonArray::fromStringList(it.value()));
-    return QJsonDocument(QJsonObject{
-        {QStringLiteral("routeMode"), mode},
-        {QStringLiteral("createdUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate)},
-        {QStringLiteral("sites"), map}
-    }).toJson(QJsonDocument::Indented);
-}
 }
 
 RemoteSplitTunnelingUpdater::RemoteSplitTunnelingUpdater(
