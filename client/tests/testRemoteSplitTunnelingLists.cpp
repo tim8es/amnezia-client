@@ -59,6 +59,21 @@ private slots:
         QCOMPARE(merged.value("new-managed.test"), (QStringList{"203.0.113.0/24"}));
     }
 
+    void replacesResolvedDomainIpsWithoutLeavingStaleRules()
+    {
+        const QMap<QString, QStringList> current{
+            {"old-managed.test", {"192.0.2.1"}},
+            {"still-managed.test", {"192.0.2.2"}}
+        };
+        const QMap<QString, QStringList> previous{
+            {"old-managed.test", {}}, {"still-managed.test", {}}
+        };
+        const QMap<QString, QStringList> incoming{{"still-managed.test", {}}};
+        const auto result = RemoteSplitTunnelingUpdater::mergeSites(current, previous, incoming);
+        QVERIFY(!result.contains("old-managed.test"));
+        QCOMPARE(result.value("still-managed.test"), (QStringList{"192.0.2.2"}));
+    }
+
     void preservesManualEditsToManagedEntries()
     {
         const QMap<QString, QStringList> current{{"edited.test", {"192.0.2.90"}}};

@@ -5,13 +5,12 @@
 #include "ui/models/ipSplitTunnelingModel.h"
 
 #include <QDir>
-#include <QHostAddress>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QRegularExpression>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
@@ -24,50 +23,10 @@ constexpr int kMaxBytes = 8 * 1024 * 1024;
 constexpr int kMaxEntries = 100000;
 constexpr int kRefreshIntervalMs = 6 * 60 * 60 * 1000;
 
-bool isIPv4(const QString &value)
+QString managedFilePath(int mode)
 {
-    QHostAddress address;
-    return address.setAddress(value) && address.protocol() == QAbstractSocket::IPv4Protocol;
-}
-
-bool isIpOrCidr(const QString &value)
-{
-    const auto parts = value.split('/');
-    if (parts.size() < 1 || parts.size() > 2 || !isIPv4(parts[0]))
-        return false;
-    if (parts.size() == 2) {
-        bool ok = false;
-        const int prefix = parts[1].toInt(&ok);
-        return ok && prefix >= 0 && prefix <= 32;
-    }
-    return true;
-}
-
-QString normalizedHost(QString hostname)
-{
-    hostname = hostname.trimmed();
-    for (const QString &prefix : {QStringLiteral("https://"), QStringLiteral("http://"),
-                                  QStringLiteral("ftp://")}) {
-        if (hostname.startsWith(prefix, Qt::CaseInsensitive)) {
-            hostname.remove(0, prefix.size());
-            break;
-        }
-    }
-    if (!isIpOrCidr(hostname))
-        hostname = hostname.section('/', 0, 0);
-    return hostname.toLower();
-}
-
-bool isValidHost(const QString &host)
-{
-    if (isIpOrCidr(host))
-        return true;
-    static const QRegularExpression domain(
-        QStringLiteral(R"(^(?:[a-z0-9_-]+\.)+[a-z0-9_-]+$)"));
-    // Do not interpret invalid dotted-decimal IPv4 addresses as domain names.
-    static const QRegularExpression numeric(QStringLiteral(R"(^[0-9.]+$)"));
-    return host.size() <= 255 && !numeric.match(host).hasMatch()
-        && domain.match(host).hasMatch();
+    return QDir(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation))
+        .filePath(QStringLiteral("remote-split-managed-mode-%1.json").arg(mode));
 }
 
 }
@@ -151,56 +110,8 @@ void RemoteSplitTunnelingUpdater::setStatus(const QString &value)
 bool RemoteSplitTunnelingUpdater::parseList(
     const QByteArray &bytes, QMap<QString, QStringList> &sites, QString &error)
 {
-    sites.clear();
-    if (bytes.isEmpty() || bytes.size() > kMaxBytes) {
-        error = tr("The list is empty or exceeds the size limit.");
-        return false;
-    }
-    QJsonParseError parseError;
-    const auto document = QJsonDocument::fromJson(bytes, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isArray()) {
-        error = tr("Invalid JSON list: %1").arg(parseError.errorString());
-        return false;
-    }
-    const QJsonArray array = document.array();
-    if (array.isEmpty() || array.size() > kMaxEntries) {
-        error = tr("The list is empty or unexpectedly large.");
-        return false;
-    }
-    for (const auto &value : array) {
-        if (!value.isObject())
-            continue;
-        const QJsonObject item = value.toObject();
-        const QString host = normalizedHost(item.value(QStringLiteral("hostname")).toString());
-        if (!isValidHost(host))
-            continue;
-        QStringList ips;
-        if (item.value(QStringLiteral("ips")).isArray()) {
-            for (const auto &ip : item.value(QStringLiteral("ips")).toArray()) {
-                const QString candidate = ip.toString().trimmed();
-                if (isIpOrCidr(candidate)) ips.append(candidate);
-            }
-        }
-        const QString singleIp = item.value(QStringLiteral("ip")).toString().trimmed();
-        if (isIpOrCidr(singleIp)) ips.append(singleIp);
-        ips.removeDuplicates();
-        if (sites.contains(host)) {
-            QStringList combined = sites.value(host);
-            combined.append(ips);
-            combined.removeDuplicates();
-            sites.insert(host, combined);
-        } else {
-            sites.insert(host, ips);
-        }
-    }
-    if (sites.isEmpty()) {
-        error = tr("No valid entries found in the list.");
-        return false;
-    }
-    return true;
+    return IpSplitTunnelingController::parseSitesFromJson(bytes, sites, error, true);
 }
-
-
 
 QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
     const QMap<QString, QStringList> &current,
@@ -210,12 +121,15 @@ QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
     QMap<QString, QStringList> result = current;
     for (auto it = previous.cbegin(); it != previous.cend(); ++it) {
         // A manually edited or deleted entry is no longer owned by the remote list.
-        if (current.contains(it.key()) && current.value(it.key()) == it.value())
+        // Domain-only subscriptions gain resolved addresses after import.
+        if (current.contains(it.key()) &&
+            (current.value(it.key()) == it.value() || it.value().isEmpty()))
             result.remove(it.key());
     }
     for (auto it = incoming.cbegin(); it != incoming.cend(); ++it) {
         const bool untouched = previous.contains(it.key()) &&
-            current.contains(it.key()) && current.value(it.key()) == previous.value(it.key());
+            current.contains(it.key()) &&
+            (current.value(it.key()) == previous.value(it.key()) || previous.value(it.key()).isEmpty());
         const bool newEntry = !previous.contains(it.key()) && !current.contains(it.key());
         if (untouched || newEntry) {
             const QStringList ips = it.value().isEmpty() && untouched
@@ -274,15 +188,37 @@ void RemoteSplitTunnelingUpdater::checkNow()
         QString error;
         if (!parseList(body, incoming, error)) { setStatus(error); return; }
 
+        // Keep large subscription snapshots out of the INI preferences.
         const QString key = QStringLiteral("routeMode-%1/").arg(mode);
-        const QByteArray oldBytes = m_settings.value(key + QStringLiteral("managedJson")).toByteArray();
+        const QString path = managedFilePath(mode);
+        QByteArray oldBytes;
+        QString oldUrl;
+        QFile stateFile(path);
+        if (stateFile.exists()) {
+            if (!stateFile.open(QIODevice::ReadOnly)) {
+                setStatus(tr("Cannot read previous list state; rules were not changed."));
+                return;
+            }
+            const QJsonDocument state = QJsonDocument::fromJson(stateFile.readAll());
+            if (!state.isObject() || !state.object().value(QStringLiteral("list")).isArray()) {
+                setStatus(tr("Previous list state is invalid; rules were not changed."));
+                return;
+            }
+            oldUrl = state.object().value(QStringLiteral("source")).toString();
+            oldBytes = QJsonDocument(state.object().value(QStringLiteral("list")).toArray())
+                           .toJson(QJsonDocument::Compact);
+        } else {
+            // Migration for builds that stored complete lists in QSettings.
+            oldBytes = m_settings.value(key + QStringLiteral("managedJson")).toByteArray();
+            oldUrl = m_settings.value(key + QStringLiteral("url")).toString();
+        }
+
         QMap<QString, QStringList> previous;
         if (!oldBytes.isEmpty() && !parseList(oldBytes, previous, error)) {
-            setStatus(tr("Previous subscription state is invalid; rules were not changed."));
+            setStatus(tr("Previous list state is invalid; rules were not changed."));
             return;
         }
-        if (m_settings.value(key + QStringLiteral("url")).toString() == url
-            && oldBytes == body) {
+        if (oldUrl == url && previous == incoming) {
             setStatus(tr("The list is already up to date."));
             return;
         }
@@ -306,15 +242,24 @@ void RemoteSplitTunnelingUpdater::checkNow()
 
         m_sites->addSites(merged, true);
         m_model->updateModel(m_sites->getCurrentSites());
-        m_settings.setValue(key + QStringLiteral("url"), url);
-        m_settings.setValue(key + QStringLiteral("managedJson"), body);
-        m_settings.sync();
-        if (m_settings.status() != QSettings::NoError) {
+
+        // One atomic file owns the source and its last managed entries.
+        QSaveFile state(path);
+        const QJsonObject snapshot{
+            {QStringLiteral("source"), url},
+            {QStringLiteral("list"), QJsonDocument::fromJson(body).array()}
+        };
+        const QByteArray data = QJsonDocument(snapshot).toJson(QJsonDocument::Compact);
+        if (!state.open(QIODevice::WriteOnly) ||
+            state.write(data) != data.size() || !state.commit()) {
             m_sites->addSites(current, true);
             m_model->updateModel(m_sites->getCurrentSites());
             setStatus(tr("Cannot save update state; previous rules restored."));
             return;
         }
+        m_settings.remove(key + QStringLiteral("managedJson"));
+        m_settings.remove(key + QStringLiteral("url"));
+        m_settings.sync();
         setStatus(tr("Remote list updated (%1 entries).").arg(incoming.size()));
     });
 }

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef REMOTESPLITTUNNELINGUPDATER_H
+#define REMOTESPLITTUNNELINGUPDATER_H
 
 #include <QMap>
 #include <QNetworkAccessManager>
@@ -59,3 +60,5 @@ private:
     bool m_busy = false;
     QString m_status;
 };
+
+#endif // REMOTESPLITTUNNELINGUPDATER_H
