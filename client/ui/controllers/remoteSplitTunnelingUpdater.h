@@ -4,6 +4,7 @@
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QSettings>
+#include <QStringList>
 #include <QTimer>
 
 class IpSplitTunnelingController;
