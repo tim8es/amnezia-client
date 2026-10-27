@@ -227,7 +227,7 @@ void CoreController::initControllers()
     m_serversUiController = new ServersUiController(m_serversController, m_settingsController, m_serversModel, m_containersModel, m_defaultServerContainersModel, this);
     setQmlContextProperty("ServersUiController", m_serversUiController);
 
-    auto *serverPingController = new ServerPingController(m_serversModel, this);
+    auto *serverPingController = new ServerPingController(m_serversModel, m_apiCountryModel, this);
     setQmlContextProperty("ServerPingController", serverPingController);
 
     m_ipSplitTunnelingUiController = new IpSplitTunnelingUiController(m_ipSplitTunnelingController, m_ipSplitTunnelingModel, this);
