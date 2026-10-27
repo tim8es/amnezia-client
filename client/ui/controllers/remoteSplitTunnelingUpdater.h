@@ -3,6 +3,7 @@
 
 #include <QMap>
 #include <QNetworkAccessManager>
+#include <QQueue>
 #include <QObject>
 #include <QSettings>
 #include <QStringList>
@@ -50,6 +51,9 @@ signals:
 private:
     QString sourceUrl() const;
     void setStatus(const QString &);
+    void complete(const QString &);
+    void resolveNext();
+    void applyRemoteList();
 
     IpSplitTunnelingController *m_sites;
     ConnectionUiController *m_connection;
@@ -58,6 +62,12 @@ private:
     QTimer m_timer;
     bool m_busy = false;
     QString m_status;
+    QString m_downloadUrl;
+    QByteArray m_downloadBody;
+    QMap<QString, QStringList> m_remoteSites;
+    QQueue<QString> m_dnsPending;
+    int m_downloadMode = 0;
+    int m_dnsActive = 0;
 };
 
 #endif // REMOTESPLITTUNNELINGUPDATER_H

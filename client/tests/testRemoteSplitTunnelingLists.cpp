@@ -59,19 +59,26 @@ private slots:
         QCOMPARE(merged.value("new-managed.test"), (QStringList{"203.0.113.0/24"}));
     }
 
-    void replacesResolvedDomainIpsWithoutLeavingStaleRules()
+    void preservesLegacyResolvedDomainsConservatively()
+    {
+        const QMap<QString, QStringList> current{{"legacy.test", {"192.0.2.1"}}};
+        const QMap<QString, QStringList> legacyPrevious{{"legacy.test", {}}};
+        const auto result = RemoteSplitTunnelingUpdater::mergeSites(current, legacyPrevious, {});
+        QCOMPARE(result.value("legacy.test"), (QStringList{"192.0.2.1"}));
+    }
+
+    void refreshesOwnedResolvedDomains()
     {
         const QMap<QString, QStringList> current{
-            {"old-managed.test", {"192.0.2.1"}},
-            {"still-managed.test", {"192.0.2.2"}}
+            {"old.test", {"192.0.2.1"}}, {"keep.test", {"192.0.2.2"}}
         };
-        const QMap<QString, QStringList> previous{
-            {"old-managed.test", {}}, {"still-managed.test", {}}
-        };
-        const QMap<QString, QStringList> incoming{{"still-managed.test", {}}};
-        const auto result = RemoteSplitTunnelingUpdater::mergeSites(current, previous, incoming);
-        QVERIFY(!result.contains("old-managed.test"));
-        QCOMPARE(result.value("still-managed.test"), (QStringList{"192.0.2.2"}));
+        const QMap<QString, QStringList> incoming{{"keep.test", {"192.0.2.3"}}};
+        QMap<QString, QStringList> managed;
+        const auto result = RemoteSplitTunnelingUpdater::mergeSites(
+            current, current, incoming, &managed);
+        QVERIFY(!result.contains("old.test"));
+        QCOMPARE(result.value("keep.test"), (QStringList{"192.0.2.3"}));
+        QCOMPARE(managed.value("keep.test"), (QStringList{"192.0.2.3"}));
     }
 
     void doesNotClaimExistingLocalEntries()
