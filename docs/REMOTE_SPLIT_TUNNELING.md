@@ -1,24 +1,34 @@
-# Remote split-tunneling list updates
+# Remote split-tunneling updates
 
-The existing split-tunneling **More** menu now has **Remote list updates**. Select
-Domains, IP lite/full or a custom HTTPS URL. Refresh manually or enable a check
-every six hours while the app is open (off by default).
+Use **More → Remote list updates** on the existing Split tunneling page.
+Select a curated list or a custom HTTPS JSON URL. Refresh manually or
+enable a six-hour check while Amnezia is open (disabled by default).
 
-The updater reuses `IpSplitTunnelingController::addSites` and the native
-route-mode storage. It never modifies routing during a VPN connection.
-Before replacing sites it saves a local JSON backup. Entries added or edited
-manually are preserved; entries unchanged since the last remote import can be
-updated or removed. HTTP response size is limited to 8 MiB and the JSON list
-must contain valid entries. Existing local entries win on collisions.
+The network layer downloads no more than 8 MiB over HTTPS. The native
+`IpSplitTunnelingController::parseSitesFromJson` parser handles import
+and remote lists, with additional strict checks for remote input
+(up to 100,000 records). Invalid or empty responses do not change rules.
 
-**Limits:** one selected source per routing mode; no background scheduler when
-Amnezia is closed. Lists with hostname-only entries may require DNS resolution
-by the existing routing stack; verify on a real VPN before relying on them.
+When importing, the updater merges rules already present with the entries
+it owns. Existing user entries win collisions; manually modified IP entries
+are preserved. A backup of the current native rules is saved before applying
+updates, and the managed list snapshot is stored atomically in
+`remote-split-managed-mode-<mode>.json`, independently of UI preferences.
+The old INI snapshot format is read once for migration.
 
-## Tests
+Hostnames without IP entries are resolved through the existing Qt DNS API
+using a maximum of six concurrent lookups and batch persistence. No routes
+are changed while VPN is connected. No automatic VPN reconnect, external
+scheduler, or daemon changes.
 
-`RemoteSplitTunnelingListsTest` covers parsing, merging and manual edits.
-Test invalid/empty responses, connected state and both routing modes on a
-disposable VPN setup before merging into upstream.
+Known limitation: for managed hostname-only entries, automatically resolved
+addresses cannot currently be distinguished from manually edited IPs,
+so the ownership check treats both as managed. Use locally defined entries
+to avoid overrides of custom IP mappings.
 
-Source design: `tim8es/amnezia-vpn-tunnel-update` (MIT); Amnezia is GPL-3.0.
+## Verification
+
+`RemoteSplitTunnelingListsTest` covers strict parsing, merging, remote
+ownership, domain-only updates, manual IP overrides and local collisions.
+Build and run CTest plus a real disconnected/connected VPN smoke test;
+review invalid, blocked, malformed and oversized responses before merging.
