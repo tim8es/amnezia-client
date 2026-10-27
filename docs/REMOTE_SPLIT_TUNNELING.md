@@ -18,8 +18,10 @@ copyright notices and source distribution obligations. The source utility is MIT
 - Refuses suspicious >50% shrinkages from the *same source*, as well as empty or
   invalid sources. Explicit switching between presets is allowed.
 - Merges `existing - previously managed + downloaded`, keeping unmanaged local
-  entries. Domain-only records retain previously resolved IPs if the hostname
-  continues to be managed. The ownership unit is the hostname, not each IP.
+  entries. If a downloaded hostname collides with an unmanaged local hostname,
+  the local entry wins and is not claimed by the subscription. Domain-only
+  records retain previously resolved IPs for continued managed hostnames.
+  Ownership is tracked per hostname, not per IP.
 - Each VPN routing mode keeps independent provenance and managed-host lists.
 - No live route changes: if connected or connecting, the downloaded update remains
   pending in memory until a user disconnects and presses **Update now**.

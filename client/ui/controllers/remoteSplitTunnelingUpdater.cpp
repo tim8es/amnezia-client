@@ -15,6 +15,7 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QUrl>
 
@@ -189,6 +190,7 @@ void RemoteSplitTunnelingUpdater::clearPending()
 bool RemoteSplitTunnelingUpdater::parseList(
     const QByteArray &bytes, QMap<QString, QStringList> &sites, QString &error)
 {
+    sites.clear();
     if (bytes.isEmpty() || bytes.size() > kMaxBytes) {
         error = tr("The list is empty or exceeds the size limit.");
         return false;
@@ -243,12 +245,18 @@ QMap<QString, QStringList> RemoteSplitTunnelingUpdater::mergeSites(
     const QStringList &previousManaged,
     const QMap<QString, QStringList> &incoming)
 {
-    QMap<QString, QStringList> result = current;
+    QSet<QString> owned;
     for (const QString &host : previousManaged)
+        owned.insert(host);
+    QMap<QString, QStringList> result = current;
+    for (const QString &host : owned)
         result.remove(host);
     for (auto it = incoming.cbegin(); it != incoming.cend(); ++it) {
+        // Local entries take priority if a subscription adds the same hostname.
+        if (!owned.contains(it.key()) && current.contains(it.key()))
+            continue;
         QStringList ips = it.value();
-        if (ips.isEmpty() && previousManaged.contains(it.key()))
+        if (ips.isEmpty() && owned.contains(it.key()))
             ips = current.value(it.key());
         result.insert(it.key(), ips);
     }
@@ -405,10 +413,20 @@ void RemoteSplitTunnelingUpdater::applyPending()
 
     m_sites->addSites(merged, true);
     m_model->updateModel(m_sites->getCurrentSites());
+
+    // Never claim ownership of a manually maintained hostname.
+    QSet<QString> previousOwned;
+    for (const QString &host : oldManaged)
+        previousOwned.insert(host);
+    QStringList newManaged;
+    for (auto it = m_pendingSites.cbegin(); it != m_pendingSites.cend(); ++it) {
+        if (previousOwned.contains(it.key()) || !current.contains(it.key()))
+            newManaged.append(it.key());
+    }
     m_settings.setValue(prefix + QStringLiteral("/url"), m_pendingUrl);
     m_settings.setValue(prefix + QStringLiteral("/sha"), m_pendingSha);
     m_settings.setValue(prefix + QStringLiteral("/etag"), m_pendingEtag);
-    m_settings.setValue(prefix + QStringLiteral("/managed"), m_pendingSites.keys());
+    m_settings.setValue(prefix + QStringLiteral("/managed"), newManaged);
     m_settings.remove(prefix + QStringLiteral("/skippedSha"));
     m_settings.remove(prefix + QStringLiteral("/skippedUrl"));
     m_settings.sync();
