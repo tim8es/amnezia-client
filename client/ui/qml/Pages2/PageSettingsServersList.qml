@@ -26,6 +26,15 @@ PageType {
             width: servers.width
 
             title: qsTr("Servers")
+
+            IconButtonType {
+                icon.source: "qrc:/images/controls/refresh-cw.svg"
+                Accessible.name: qsTr("Ping all servers")
+                visible: !GC.isMobile()
+                enabled: !ServerPingController.busy && !ConnectionController.isConnected
+                         && !ConnectionController.isConnectionInProgress
+                onClicked: ServerPingController.pingAll()
+            }
         }
 
         model: ServersModel
@@ -54,13 +63,23 @@ PageType {
                         servicesNameString += servicesName[i] + " · "
                     }
 
-                    if (ServersUiController.isServerFromApi(serverId)) {
-                        return servicesNameString + serverDescription
-                    } else {
-                        return servicesNameString + hostName
-                    }
+                    // The revision property makes the status update reactive.
+                    ServerPingController.revision
+                    var result = ServerPingController.resultText(serverId)
+                    var base = ServersUiController.isServerFromApi(serverId)
+                               ? servicesNameString + serverDescription
+                               : servicesNameString + hostName
+                    return base + (result !== "" ? " · " + result : "")
                 }
                 trailingIconSource: "qrc:/images/controls/chevron-right.svg"
+
+                IconButtonType {
+                    icon.source: "qrc:/images/controls/refresh-cw.svg"
+                    Accessible.name: qsTr("Ping %1").arg(name)
+                    visible: !GC.isMobile()
+                    enabled: !ConnectionController.isConnected && !ConnectionController.isConnectionInProgress
+                    onClicked: ServerPingController.pingServer(serverId)
+                }
 
                 onClicked: {
                     ServersUiController.setProcessedServerId(serverId)
