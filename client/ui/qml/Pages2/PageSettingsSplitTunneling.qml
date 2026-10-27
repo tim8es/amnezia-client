@@ -166,8 +166,6 @@ PageType {
                 text: root.routeModes[modeSelector.currentIndex].name
                 color: AmneziaStyle.color.textSecondary
             }
-
-
         }
 
         delegate: Item {
@@ -311,7 +309,6 @@ PageType {
             }
         }
     }
-
 
     SheetType {
         id: remoteListsSheet
