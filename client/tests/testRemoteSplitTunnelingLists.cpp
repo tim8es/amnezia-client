@@ -57,6 +57,7 @@ private slots:
         QCOMPARE(merged.value("overlap.test"), (QStringList{"192.0.2.11"}));
         QCOMPARE(merged.value("retained.test"), (QStringList{"192.0.2.2"}));
         QCOMPARE(merged.value("new-managed.test"), (QStringList{"203.0.113.0/24"}));
+    }
 
     void preservesManualEditsToManagedEntries()
     {
