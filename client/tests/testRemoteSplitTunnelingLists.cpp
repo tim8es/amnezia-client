@@ -50,13 +50,22 @@ private slots:
             {"new-managed.test", {"203.0.113.0/24"}}
         };
         const auto merged = RemoteSplitTunnelingUpdater::mergeSites(
-            current, {"old-managed.test", "retained.test"}, incoming);
+            current, {{"old-managed.test", {"192.0.2.1"}}, {"retained.test", {"192.0.2.2"}}}, incoming);
         QCOMPARE(merged.size(), 4);
         QVERIFY(!merged.contains("old-managed.test"));
         QCOMPARE(merged.value("local.test"), (QStringList{"192.0.2.10"}));
         QCOMPARE(merged.value("overlap.test"), (QStringList{"192.0.2.11"}));
         QCOMPARE(merged.value("retained.test"), (QStringList{"192.0.2.2"}));
         QCOMPARE(merged.value("new-managed.test"), (QStringList{"203.0.113.0/24"}));
+
+    void preservesManualEditsToManagedEntries()
+    {
+        const QMap<QString, QStringList> current{{"edited.test", {"192.0.2.90"}}};
+        const QMap<QString, QStringList> previous{{"edited.test", {"192.0.2.1"}}};
+        const QMap<QString, QStringList> incoming{{"edited.test", {"192.0.2.2"}}};
+        const auto result = RemoteSplitTunnelingUpdater::mergeSites(current, previous, incoming);
+        QCOMPARE(result.value("edited.test"), (QStringList{"192.0.2.90"}));
+        QCOMPARE(RemoteSplitTunnelingUpdater::mergeSites({}, previous, incoming).size(), 0);
     }
 };
 
