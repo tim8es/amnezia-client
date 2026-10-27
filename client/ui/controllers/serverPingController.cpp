@@ -6,6 +6,11 @@
 #include <QRegularExpression>
 #include <QTimer>
 
+#if defined(Q_OS_WIN)
+#include <windows.h>
+#include <string>
+#endif
+
 namespace {
 constexpr int kMaxConcurrent = 3;
 constexpr int kTimeoutMs = 3500;
@@ -63,7 +68,20 @@ int ServerPingController::parseRttMs(const QByteArray &output)
     static const QRegularExpression rtt(QStringLiteral(
         R"((?:time|время)\s*[=<]\s*(\d+(?:[.,]\d+)?)\s*(?:ms|мс))"),
         QRegularExpression::CaseInsensitiveOption);
-    const auto match = rtt.match(QString::fromUtf8(output));
+    auto match = rtt.match(QString::fromUtf8(output));
+#if defined(Q_OS_WIN)
+    if (!match.hasMatch()) {
+        // Windows console tools commonly emit OEM code-page text, not UTF-8.
+        const int count = MultiByteToWideChar(CP_OEMCP, 0, output.constData(),
+                                              static_cast<int>(output.size()), nullptr, 0);
+        if (count > 0) {
+            std::wstring wide(static_cast<size_t>(count), L'\0');
+            MultiByteToWideChar(CP_OEMCP, 0, output.constData(),
+                                static_cast<int>(output.size()), wide.data(), count);
+            match = rtt.match(QString::fromWCharArray(wide.data(), count));
+        }
+    }
+#endif
     if (!match.hasMatch())
         return -1;
     bool ok = false;
