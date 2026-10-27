@@ -2,7 +2,8 @@
 
 The **Servers** page provides a **Ping all** action and a per-server **Ping**
 button on desktop platforms. Up to three independent probes run concurrently.
-Each server gets one IPv4 ICMP echo with an OS-level timeout; incomplete
+For consistent measurements, probing is disabled while a VPN connection is
+active or connecting. Each server gets one IPv4 ICMP echo with an OS-level timeout; incomplete
 processes are killed after 3.5 seconds. No configuration changes, connections,
 credentials or background monitoring are involved.
 

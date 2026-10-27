@@ -26,13 +26,16 @@ PageType {
             width: servers.width
 
             title: qsTr("Servers")
-            description: qsTr("ICMP ping checks host reachability, not VPN availability.")
+            description: ConnectionController.isConnected || ConnectionController.isConnectionInProgress
+                         ? qsTr("Disconnect VPN before checking latency.")
+                         : qsTr("ICMP tests host reachability, not VPN availability.")
 
             ButtonType {
                 text: ServerPingController.busy ? qsTr("Checking...") : qsTr("Ping all")
                 size: ButtonType.Small
                 variant: ButtonType.Secondary
-                enabled: !ServerPingController.busy
+                enabled: !ServerPingController.busy && !ConnectionController.isConnected
+                         && !ConnectionController.isConnectionInProgress
                 visible: !GC.isMobile()
                 onClicked: ServerPingController.pingAll()
             }
@@ -78,6 +81,7 @@ PageType {
                     size: ButtonType.Small
                     variant: ButtonType.Secondary
                     visible: !GC.isMobile()
+                    enabled: !ConnectionController.isConnected && !ConnectionController.isConnectionInProgress
                     Accessible.name: qsTr("Ping %1").arg(name)
                     onClicked: ServerPingController.pingServer(serverId)
                 }
