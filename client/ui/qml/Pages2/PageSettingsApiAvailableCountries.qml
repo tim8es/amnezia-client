@@ -223,11 +223,25 @@ PageType {
 
                 text: rowItem.countryName
                 countryFlagCode: rowItem.countryImageCode
+                subtitle: {
+                    ServerPingController.revision
+                    return ServerPingController.resultText(
+                        ServersUiController.processedServerId + "/" + rowItem.countryCode)
+                }
                 highlighted: rowItem.isCurrent
                 favorite: rowItem.isFavorite
 
                 onClicked: root.activateCountry(rowItem.countryCode, rowItem.sourceCountryName)
                 onFavoriteToggled: ApiCountryListModel.toggleFavorite(rowItem.countryCode)
+
+                IconButtonType {
+                    icon.source: "qrc:/images/controls/refresh-cw.svg"
+                    Accessible.name: qsTr("Ping %1").arg(rowItem.countryName)
+                    visible: !GC.isMobile()
+                    enabled: !ConnectionController.isConnected && !ConnectionController.isConnectionInProgress
+                    onClicked: ServerPingController.pingCountry(
+                        ServersUiController.processedServerId, rowItem.countryCode)
+                }
             }
         }
     }
@@ -271,6 +285,14 @@ PageType {
         }
 
         navigationButtons: [
+            IconButtonType {
+                icon.source: "qrc:/images/controls/refresh-cw.svg"
+                Accessible.name: qsTr("Ping subscription locations")
+                visible: !GC.isMobile()
+                enabled: !ServerPingController.busy && !ConnectionController.isConnected
+                         && !ConnectionController.isConnectionInProgress
+                onClicked: ServerPingController.pingCountries(ServersUiController.processedServerId)
+            },
             IconButtonType {
                 id: settingsButton
 

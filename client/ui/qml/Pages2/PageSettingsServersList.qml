@@ -26,17 +26,13 @@ PageType {
             width: servers.width
 
             title: qsTr("Servers")
-            description: ConnectionController.isConnected || ConnectionController.isConnectionInProgress
-                         ? qsTr("Disconnect VPN before checking latency.")
-                         : qsTr("ICMP tests host reachability, not VPN availability.")
 
-            ButtonType {
-                text: ServerPingController.busy ? qsTr("Checking...") : qsTr("Ping all")
-                size: ButtonType.Small
-                variant: ButtonType.Secondary
+            IconButtonType {
+                icon.source: "qrc:/images/controls/refresh-cw.svg"
+                Accessible.name: qsTr("Ping all servers")
+                visible: !GC.isMobile()
                 enabled: !ServerPingController.busy && !ConnectionController.isConnected
                          && !ConnectionController.isConnectionInProgress
-                visible: !GC.isMobile()
                 onClicked: ServerPingController.pingAll()
             }
         }
@@ -75,13 +71,13 @@ PageType {
                                : servicesNameString + hostName
                     return base + (result !== "" ? " · " + result : "")
                 }
-                ButtonType {
-                    text: qsTr("Ping")
-                    size: ButtonType.Small
-                    variant: ButtonType.Secondary
+                trailingIconSource: "qrc:/images/controls/chevron-right.svg"
+
+                IconButtonType {
+                    icon.source: "qrc:/images/controls/refresh-cw.svg"
+                    Accessible.name: qsTr("Ping %1").arg(name)
                     visible: !GC.isMobile()
                     enabled: !ConnectionController.isConnected && !ConnectionController.isConnectionInProgress
-                    Accessible.name: qsTr("Ping %1").arg(name)
                     onClicked: ServerPingController.pingServer(serverId)
                 }
 

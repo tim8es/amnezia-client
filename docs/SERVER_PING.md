@@ -1,45 +1,20 @@
-# On-demand server ICMP checks
+# Minimal on-demand ICMP latency checks
 
-The **Servers** page provides a **Ping all** action and a per-server **Ping**
-button on desktop platforms. Up to three independent probes run concurrently.
-For consistent measurements, probing is disabled while a VPN connection is
-active or connecting. Each server gets one IPv4 ICMP echo with an OS-level timeout; incomplete
-processes are killed after 3.5 seconds. No configuration changes, connections,
-credentials or background monitoring are involved.
+The existing server rows retain their navigation and show a small refresh action
+and optional `ICMP: N ms` text. The existing subscription country picker gains
+the same action for known locations, plus a bulk check in its toolbar.
 
-## What the result means
+Only known addresses are probed:
+- Standalone servers: `ServersModel` hostname.
+- Subscription: the current selected location's hostname, or `hostName`
+  explicitly supplied for a country in the read-only catalog.
+  Other countries display `Address unavailable`. No new config is requested or
+  issued merely to discover endpoints, avoiding unexpected key rotation.
 
-- **ICMP: N ms**: host replied to an ICMP echo, with the RTT parsed from ping.
-- **ICMP: reachable**: echo succeeded but localized output had no parseable RTT.
-- **No ICMP reply**: echo did not complete successfully; firewall, blocked ICMP,
-  DNS, routing or process permissions may be responsible.
-- **ICMP: unsupported address**: entry does not contain a suitable IPv4 or DNS
-  hostname. IPv6-only addresses are not probed in this first version.
+One ICMP echo per host, at most three parallel processes, with a hard timeout.
+An echo reply is not proof that the VPN protocol works; an ICMP timeout is not
+proof that the VPN is offline. Desktop only.
 
-**ICMP is not a VPN handshake.** A server can respond to ping while its VPN
-service is unavailable, or successfully serve VPN traffic while blocking ping.
-Do not label unresponsive hosts as "offline" or auto-select servers based on
-these results. A protocol-specific connectivity/handshake check would be a
-different feature.
-
-On Android and iOS, process-based ICMP checks are deliberately disabled.
-
-## Implementation notes
-
-- Uses \`QProcess\` with discrete arguments, not a shell.
-- Hostnames are validated before launching a probe (no URL, port, options).
-- Results exist in memory only and are cleared on server list model reset.
-- One-shot, user-triggered checks only; no telemetry or periodic network traffic.
-- Native output parsing supports common English and Russian RTT formats, with
-  a safe "reachable" fallback when output cannot be parsed.
-
-## Verification
-
-1. Run \`ServerPingControllerTest\` through CTest (input and output parsing).
-2. Exercise Ping / Ping all from the desktop Servers page.
-3. Verify a responding host shows RTT and a nonresponding host shows
-   "No ICMP reply" (not "VPN offline").
-4. Verify DNS errors, invalid target, missing ping executable, and timeouts do
-   not freeze the interface.
-5. Verify server rename/delete/model refresh clears stale results.
-6. Test Windows/macOS/Linux build and operation before release.
+`ServerPingControllerTest` covers target validation, localized output parsing
+and non-leakage of the current endpoint to other subscription countries.
+Actual catalog endpoint coverage and network behavior need device testing.
